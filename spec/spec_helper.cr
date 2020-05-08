@@ -1,2 +1,2 @@
 require "spec"
-require "../src/csp"
+require "../src/common"

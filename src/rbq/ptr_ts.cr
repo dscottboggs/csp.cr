@@ -1,78 +1,106 @@
 require "./sequence"
+require "../common"
 
 module CSP
-  abstract struct RBQ
-    abstract struct PTR_T
+  abstract class RBQ(T)
+    abstract struct PtrT
       abstract def next
       abstract def barr
       abstract def update_barr(mask)
       abstract def mark_available(seq_v, mask)
-      abstract def markm_available(start, _end, mask)
-      abstract def next_rsv(current, n) : Bool
+      abstract def mark_available(start, _end, mask)
+      abstract def next_rsv(current : UInt64, n : UInt64) : Bool
     end
 
-    # what is SPTR?
-    struct SPTR < PTR_T
-      property next : UInt64
+    struct SPTR < PtrT
       atomic_property barr : RBQ::Sequence
-      # Why is there padding? Should this be @[Packed]?
       @_ : PaddingT
 
       def initialize(cap)
-        @next = 0
+        @next = 0_u64
         @barr = RBQ::Sequence.new 0
         @_ = uninitialized PaddingT # it doesn't matter what's in padding
       end
 
-      # why?
+      getter :next
+
+      # Just returns the value of barr. Only here for API compatibility.
       def update_barr(mask)
-        @barr.get
+        barr
       end
 
       def mark_available(seq_v, mask)
         self.next
       end
 
-      # what is 'm' here?
-      def markm_available(start, _end, mask)
+      def mark_available(start, _end, mask)
         self.next
       end
 
       # why?
       # what is rsv?
-      def next_rsv(current, n)
-        barr.set current + n
+      def next_rsv(current : UInt64, n : UInt64)
+        @barr.set current + n
         true
       end
     end
 
-    # what is MPTR? multiple pointer?
-    struct MPTR < PTR_T
+    struct MPTR < PtrT
+
+      # A wrapper around the @stats property of an MPTR which
+      # provides an indexable implementation.
+      private struct StatsT
+        include Indexable(Sequence)
+
+        @stats : Slice(Sequence)
+
+        def initialize(capacity)
+          @stats = Slice(RBQ::Sequence).new size: capacity.to_i do
+            RBQ::Sequence.new(UInt64::MAX).as RBQ::Sequence
+          end
+        end
+
+        @[AlwaysInline]
+        def size
+          @stats.size
+        end
+
+        @[AlwaysInline]
+        def unsafe_fetch(index)
+          @stats.unsafe_fetch index
+        end
+
+        @[AlwaysInline]
+        def []=(index, value)
+          @stats[index].set value
+        end
+      end
+
       atomic_property next : RBQ::Sequence = RBQ::Sequence.new 0
       atomic_property barr : RBQ::Sequence = RBQ::Sequence.new 0
       # Why is there padding? Should this be @[Packed]?
       @_ : PaddingT
-      property stats : Slice(RBQ::Sequence)
+      property stats : StatsT
 
       def initialize(capacity)
-        @stats = Slice(RBQ::Sequence).new size: cap, value: -1
+        @stats = StatsT.new capacity
         @_ = uninitialized PaddingT # it doesn't matter what's in padding
       end
 
-      def available?(seq_v, mask)
-        stats[seq_v & mask].get == seq_v
+      private def available?(seq_v, mask)
+        stats[seq_v & mask] == seq_v
       end
 
       def mark_available(seq_v, mask)
-        stats[seq_v & mask].set seq_v
+        stats[seq_v & mask] = seq_v
       end
 
-      def markm_available(start, _end, mask) : Nil
+      def mark_available(start, _end, mask) : Nil
         (start.._end).each { |i| mark_available i, mask }
       end
 
       def next_rsv(curr, n)
-        @next.compare_and_exchange curr, curr + n
+        @next.compare_and_set curr, curr + n
       end
 
       def update_barr(mask)
@@ -82,12 +110,14 @@ module CSP
           _barr += 1
         end
         if current != _barr
-          _, ok = @barr.compare_and_exchange current, _barr
+          _, ok = @barr.compare_and_set current, _barr
           if ok
             _barr
           else
-            self.barr
+            current
           end
+        else
+          current
         end
       end
     end

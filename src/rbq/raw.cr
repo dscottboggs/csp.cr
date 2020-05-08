@@ -2,11 +2,11 @@ require "../rbq"
 
 module CSP
   # Raw (not thread safe) RBQ implementation.
-  struct Raw(T, I) < RBQ
+  class Raw(T) < RBQ(T)
     def initialize(capacity_exponent)
       @capacity = 1 << capacity_exponent
       @mask = cap - 1
-      @items : Items(T, I) = Items(T, I).new self, @capacity
+      @items : Items(T) = Items(T).new self, @capacity
     end
 
     property items,
@@ -16,7 +16,7 @@ module CSP
       fast = 0_u64
 
     # Returns true if successful
-    def try_push(item : T) : Bool
+    def push?(item : T) : Bool
       !!if size < capacity
         items[@slow] = item
         @slow += 1
@@ -24,23 +24,23 @@ module CSP
     end
 
     # Returns true if successful
-    def try_push_front(item : T) : Bool
+    def push_front?(item : T) : Bool
       !!if size < capacity
         @items[@slow -= 1] = item
       end
     end
 
-    def try_pop : T?
+    def pop? : T?
       if size > 0
         @items[@slow].tap { @slow += 1 }
       end
     end
 
-    def try_grow
+    def grow? : Bool
       cap = @capacity << 1
       items = @items.to_unsafe.realloc size: cap
-      unless items.null?
-        @items = Items(T, I).new items
+      !!unless items.null?
+        @items = Items(T).new items
         @capacity = cap
       end
     end
