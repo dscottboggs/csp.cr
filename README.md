@@ -1,5 +1,5 @@
 # csp.cr
-Binding/port of libcsp.
+Work-in-progress transliteration of of [libcsp](https://github.com/shiyanhui/libcsp).
 
 ## Installation
 
@@ -22,8 +22,10 @@ require "csp"
 TODO: Write usage instructions here
 
 ## Development
-
-TODO: Write development instructions here
+The best way to communicate with me regarding development on this project is
+either by creating an issue on this repo, or `@scott#2523` on the Crystal
+discord server, or by sending a message to the unofficial Crystal
+[Telegram](https://t.me/codrTalkCrystal) chat.
 
 ## Contributing
 
